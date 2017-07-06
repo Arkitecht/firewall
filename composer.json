@@ -1,5 +1,5 @@
 {
-    "name": "pragmarx/firewall",
+    "name": "arkitecht/firewall",
 
     "description": "A Laravel 4.1+ IP whitelisting and blacklisting",
 
@@ -35,9 +35,6 @@
     },
 
     "extra": {
-        "branch-alias": {
-            "dev-master": "0.5.x-dev"
-        },
         "laravel": {
             "providers": [
                 "PragmaRX\\Firewall\\Vendor\\Laravel\\ServiceProvider"
