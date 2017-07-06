@@ -73,14 +73,15 @@ class Firewall implements FirewallInterface
      * @param $ip
      * @return object
      */
-    private function createModel($whitelist, $ip)
+    private function createModel($whitelist, $ip, $group = '*')
     {
         $class = new ReflectionClass(get_class($this->model));
 
         $model = $class->newInstanceArgs([
                                              [
                                                  'ip_address'  => $ip,
-                                                 'whitelisted' => $whitelist
+                                                 'whitelisted' => $whitelist,
+                                                 'group'       => $group
                                              ]
                                          ]);
 
@@ -93,16 +94,16 @@ class Firewall implements FirewallInterface
 	 * @param  string $ip
 	 * @return object|null
 	 */
-	public function find($ip)
+	public function find($ip, $group = '*')
 	{
-		if ($this->cacheHas($ip))
+		if ($this->cacheHas($ip,$group))
 		{
-			return $this->cacheGet($ip);
+			return $this->cacheGet($ip,$group);
 		}
 
-		if ($model = $this->findIp($ip))
+		if ($model = $this->findIp($ip,$group))
 		{
-			$this->cacheRemember($model);
+			$this->cacheRemember($model,$group);
 		}
 
 		return $model;
@@ -114,16 +115,17 @@ class Firewall implements FirewallInterface
 	 * @param  string $ip
 	 * @return object|null
 	 */
-	public function addToList($whitelist, $ip)
+	public function addToList($whitelist, $ip, $group = '*')
 	{
 		$this->model->unguard();
 
 		$model = $this->model->create(array(
 										'ip_address' => $ip,
-										'whitelisted' => $whitelist
+										'whitelisted' => $whitelist,
+                                        'group' => $group
 									));
 
-		$this->cacheRemember($model);
+		$this->cacheRemember($model, $group);
 
 		return $model;
 	}
@@ -134,20 +136,20 @@ class Firewall implements FirewallInterface
      * @param  string $ip
      * @return object|null
      */
-    public function addToSessionList($whitelist, $ip)
+    public function addToSessionList($whitelist, $ip, $group = '*')
     {
-        $this->removeFromSession($model = $this->createModel($whitelist, $ip));
+        $this->removeFromSession($model = $this->createModel($whitelist, $ip, $group = '*'));
 
-        return $this->addToSession($model);
+        return $this->addToSession($model, $group);
     }
 
-	public function delete($ipAddress)
+	public function delete($ipAddress, $group = '*')
 	{
-		if ($ip = $this->find($ipAddress))
+		if ($ip = $this->find($ipAddress, $group))
 		{
 			$ip->delete();
 
-			$this->cacheForget($ipAddress);
+			$this->cacheForget($ipAddress, $group);
 
 			return true;
 		}
@@ -155,12 +157,12 @@ class Firewall implements FirewallInterface
 		return false;
 	}
 
-	public function cacheKey($ip)
+	public function cacheKey($ip, $group = '*')
 	{
-		return static::CACHE_BASE_NAME."ip_address.$ip";
+		return static::CACHE_BASE_NAME."ip_address.$group.$ip";
 	}
 
-	public function cacheHas($ip)
+	public function cacheHas($ip, $group = '*')
 	{
 		if ($this->config->get('cache_expire_time'))
 		{
@@ -170,25 +172,25 @@ class Firewall implements FirewallInterface
 		return false;
 	}
 
-	public function cacheGet($ip)
+	public function cacheGet($ip, $group = '*')
 	{
-		return $this->cache->get($this->cacheKey($ip));
+		return $this->cache->get($this->cacheKey($ip, $group));
 	}
 
-	public function cacheForget($ip)
+	public function cacheForget($ip, $group = '*')
 	{
-		$this->cache->forget($this->cacheKey($ip));
+		$this->cache->forget($this->cacheKey($ip, $group));
 	}
 
-	public function cacheRemember($model)
+	public function cacheRemember($model, $group = '*')
 	{
 		if ($timeout = $this->config->get('cache_expire_time'))
 		{
-			$this->cache->put($this->cacheKey($model->ip_address), $model, $timeout);
+			$this->cache->put($this->cacheKey($model->ip_address, $group), $model, $timeout);
 		}
 	}
 
-	public function all()
+	public function all($group = '*')
 	{
 		$cacheTime = $this->config->get('ip_list_cache_expire_time');
 
@@ -198,9 +200,9 @@ class Firewall implements FirewallInterface
 		}
 
 		$list = $this->mergeLists(
-			$this->getAllFromDatabase(),
-			$this->toModels($this->getNonDatabaseIps()),
-            $this->getSessionIps()
+			$this->getAllFromDatabase($group),
+			$this->toModels($this->getNonDatabaseIps($group)),
+            $this->getSessionIps($group)
 		);
 
 		if ($cacheTime)
@@ -233,16 +235,22 @@ class Firewall implements FirewallInterface
         return $deleted;
 	}
 
-	private function findIp($ip)
+	private function findIp($ip, $group = '*')
 	{
-		if ($model = $this->nonDatabaseFind($ip))
+		if ($model = $this->nonDatabaseFind($ip, $group))
 		{
 			return $model;
 		}
 
 		if ($this->config->get('use_database'))
 		{
-			return $this->model->where('ip_address', $ip)->first();
+			return $this->model->where('ip_address', $ip)
+                ->where(function($where) use ( $group ) {
+                    $where->whereNull('group')
+                        ->orWhere('group', $group)
+                        ->orWhere('group', '*');
+                })
+                ->first();
 		}
 
 		return null;
@@ -261,20 +269,20 @@ class Firewall implements FirewallInterface
         return collect($this->getSession()->get('pragmarx.firewall', []));
     }
 
-    private function nonDatabaseFind($ip)
+    private function nonDatabaseFind($ip, $group = '*')
 	{
 		$ips = $this->getNonDatabaseIps();
 
-		if ($ip = $this->ipArraySearch($ip, $ips))
+		if ($ip = $this->ipArraySearch($ip, $ips, $group))
 		{
-			return $this->makeModel($ip);
+			return $this->makeModel($ip, $group);
 		}
 
         $ips = $this->getSessionIps()->toArray();
 
-        if ($ip = $this->ipArraySearch($ip, $ips))
+        if ($ip = $this->ipArraySearch($ip, $ips, $group))
         {
-            return $this->makeModel($ip);
+            return $this->makeModel($ip, $group);
         }
 
 		return null;
@@ -406,11 +414,15 @@ class Firewall implements FirewallInterface
 	/**
 	 * @return array
 	 */
-	private function getAllFromDatabase()
+	private function getAllFromDatabase($group = '*')
 	{
 		if ($this->config->get('use_database'))
 		{
-			$database_ips = $this->model->all();
+		    if ( !$group ) {
+                $database_ips = $this->model->all();
+            } else {
+                $database_ips = $this->model->where('group',$group)->get();
+            }
 			return $database_ips;
 		}
 		else

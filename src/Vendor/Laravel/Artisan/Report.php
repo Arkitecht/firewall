@@ -48,6 +48,9 @@ class Report extends Base
         foreach ($this->laravel->firewall->report() as $ip) {
             $list[] = [
                 $ip['ip_address'],
+                $ip['group'] == '*'
+                    ? '  *  '
+                    : $ip['group'],
                 $ip['whitelisted'] == false
                     ? ''
                     : '    X    ',
@@ -57,7 +60,7 @@ class Report extends Base
             ];
         }
 
-        $this->table->setHeaders(['IP Address', 'Whitelist', 'Blacklist'])->setRows($list);
+        $this->table->setHeaders(['IP Address', 'Group', 'Whitelist', 'Blacklist'])->setRows($list);
 
         $this->table->render();
     }

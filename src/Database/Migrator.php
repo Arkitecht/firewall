@@ -20,7 +20,10 @@ class Migrator extends Migration
             function ($table) {
                 $table->increments('id');
 
-                $table->string('ip_address', 39)->unique()->index();
+                $table->string('ip_address', 39)->index();
+                $table->string('group')->default('*')->index();
+
+                $table->unique(['ip_address','group']);
 
                 $table->boolean('whitelisted')->default(false); /// default is blacklist
 

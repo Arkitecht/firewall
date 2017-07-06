@@ -35,7 +35,10 @@ class Whitelist extends Base
      * @return mixed
      */
     public function fire() {
-        $type = $this->laravel->firewall->whitelist($this->argument('ip'), $this->option('force'))
+        $type = $this->laravel->firewall->whitelist(
+            $this->argument('ip'),
+            $this->option('force'),
+            $this->argument('group') || '*')
             ? 'info'
             : 'error';
 
@@ -50,6 +53,7 @@ class Whitelist extends Base
     protected function getArguments() {
         return [
             ['ip', InputArgument::REQUIRED, 'The IP address to be added.'],
+            ['group', InputArgument::OPTIONAL, 'The IP address group'],
         ];
     }
 

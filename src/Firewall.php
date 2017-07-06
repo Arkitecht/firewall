@@ -139,7 +139,7 @@ class Firewall
      * @param $force
      * @return bool
      */
-    public function addToList($whitelist, $ip, $force) {
+    public function addToList($whitelist, $ip, $force, $group = '*') {
         $list = $whitelist
             ? 'whitelist'
             : 'blacklist';
@@ -150,10 +150,10 @@ class Firewall
             return false;
         }
 
-        $listed = $this->whichList($ip);
+        $listed = $this->whichList($ip, $group);
 
         if ($listed == $list) {
-            $this->addMessage(sprintf('%s is already %s', $ip, $list . 'ed'));
+            $this->addMessage(sprintf('%s is already %s for group %s', $ip, $list . 'ed', $group));
 
             return false;
         }
@@ -163,15 +163,15 @@ class Firewall
                     $this->remove($ip);
                 }
 
-                $this->dataRepository->firewall->addToList($whitelist, $ip);
+                $this->dataRepository->firewall->addToList($whitelist, $ip, $group);
 
-                $this->addMessage(sprintf('%s is now %s', $ip, $list . 'ed'));
+                $this->addMessage(sprintf('%s is now %s for group %s', $ip, $list . 'ed', $group));
 
                 return true;
             }
         }
 
-        $this->addMessage(sprintf('%s is currently %sed', $ip, $listed));
+        $this->addMessage(sprintf('%s is currently %sed for %s', $ip, $listed, $group));
 
         return false;
     }
@@ -184,8 +184,8 @@ class Firewall
     /**
      * Get all IP addresses.
      */
-    public function all() {
-        return $this->dataRepository->firewall->all();
+    public function all($group = '*') {
+        return $this->dataRepository->firewall->all($group);
     }
 
     /**
@@ -195,8 +195,20 @@ class Firewall
      * @param bool $force
      * @return bool
      */
-    public function blacklist($ip, $force = false) {
-        return $this->addToList(false, $ip, $force);
+    public function blacklist($ip, $force = false, $group = '*') {
+        return $this->addToList(false, $ip, $force, $group);
+    }
+
+    /**
+     * Blacklist an IP adress for a group.
+     *
+     * @param $ip
+     * @param $group
+     * @param bool $force
+     * @return bool
+     */
+    public function blacklistForGroup($ip, $group, $force = false) {
+        return $this->addToList(false, $ip, $force, $group);
     }
 
     /**
@@ -205,8 +217,8 @@ class Firewall
      * @param $ip
      * @return bool
      */
-    public function blacklistOnSession($ip) {
-        return $this->addToSessionList(false, $ip);
+    public function blacklistOnSession($ip, $group = '*') {
+        return $this->addToSessionList(false, $ip, $group);
     }
 
     /**
@@ -243,12 +255,12 @@ class Firewall
      * @param $ip_address
      * @return bool
      */
-    private function checkSecondaryLists($ip_address) {
+    private function checkSecondaryLists($ip_address, $group = '*') {
         if (!$this->config->get('enable_range_search')) {
             return false;
         }
 
-        foreach ($this->dataRepository->firewall->all() as $range) {
+        foreach ($this->dataRepository->firewall->all($group) as $range) {
             if (
                 IpAddress::ipV4Valid($range['ip_address']) &&
                 ipv4_in_range($ip_address, $range['ip_address'])
@@ -358,8 +370,8 @@ class Firewall
      * @param null $ip
      * @return bool
      */
-    public function isBlacklisted($ip = null) {
-        $list = $this->whichList($ip);
+    public function isBlacklisted($ip = null, $group = '*') {
+        $list = $this->whichList($ip, $group);
 
         return !($list == 'whitelist') &&
                 $list == 'blacklist';
@@ -371,8 +383,8 @@ class Firewall
      * @param null $ip
      * @return bool
      */
-    public function isWhitelisted($ip = null) {
-        return $this->whichList($ip) == 'whitelist';
+    public function isWhitelisted($ip = null, $group = '*') {
+        return $this->whichList($ip, $group) == 'whitelist';
     }
 
     /**
@@ -392,18 +404,18 @@ class Firewall
      * @param $ip
      * @return bool
      */
-    public function remove($ip) {
-        $listed = $this->whichList($ip);
+    public function remove($ip, $group = '*') {
+        $listed = $this->whichList($ip, $group);
 
         if ($listed) {
-            $this->dataRepository->firewall->delete($ip);
+            $this->dataRepository->firewall->delete($ip, $group);
 
-            $this->addMessage(sprintf('%s removed from %s', $ip, $listed));
+            $this->addMessage(sprintf('%s removed from %s for %s', $ip, $listed, $group));
 
             return true;
         }
 
-        $this->addMessage(sprintf('%s is not listed', $ip));
+        $this->addMessage(sprintf('%s is not listed for $s', $ip, $group));
 
         return false;
     }
@@ -429,8 +441,8 @@ class Firewall
      *
      * @return mixed
      */
-    public function report() {
-        return $this->dataRepository->firewall->all()->toArray();
+    public function report($group = '*') {
+        return $this->dataRepository->firewall->all($group)->toArray();
     }
 
     /**
@@ -468,13 +480,13 @@ class Firewall
      * @param $ip_address
      * @return bool|string
      */
-    public function whichList($ip_address) {
+    public function whichList($ip_address, $group = '*') {
         $ip_address = $ip_address
             ?: $this->getIp();
 
-        if (!$ip_found = $this->dataRepository->firewall->find($ip_address)) {
+        if (!$ip_found = $this->dataRepository->firewall->find($ip_address,$group)) {
             if (!$ip_found = $this->getListingByCountry($ip_address)) {
-                if (!$ip_found = $this->checkSecondaryLists($ip_address)) {
+                if (!$ip_found = $this->checkSecondaryLists($ip_address,$group)) {
                     return false;
                 }
             }
@@ -496,8 +508,20 @@ class Firewall
      * @param bool $force
      * @return bool
      */
-    public function whitelist($ip, $force = false) {
-        return $this->addToList(true, $ip, $force);
+    public function whitelist($ip, $force = false, $group = '*') {
+        return $this->addToList(true, $ip, $force, $group);
+    }
+
+    /**
+     * Whitelist an IP address for a group.
+     *
+     * @param $ip
+     * @param $group
+     * @param bool $force
+     * @return bool
+     */
+    public function whitelistForGroup($ip, $group, $force = false) {
+        return $this->addToList(true, $ip, $force, $group);
     }
 
     /**
@@ -506,7 +530,7 @@ class Firewall
      * @param $ip
      * @return bool
      */
-    public function whitelistOnSession($ip) {
-        return $this->addToSessionList(true, $ip);
+    public function whitelistOnSession($ip, $group = '*') {
+        return $this->addToSessionList(true, $ip, $group);
     }
 }
