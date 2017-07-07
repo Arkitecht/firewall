@@ -20,8 +20,8 @@ class FirewallBlacklist
      * @param  \Closure $next
      * @return mixed
      */
-    public function handle($request, Closure $next) {
-        $filterResponse = $this->blacklist->filter();
+    public function handle($request, Closure $next, $group = '') {
+        $filterResponse = $this->blacklist->filter($group);
 
         if ($filterResponse != null) {
             return $filterResponse;

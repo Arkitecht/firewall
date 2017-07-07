@@ -8,10 +8,10 @@ class Whitelist
 {
     use Redirectable;
 
-    public function filter() {
+    public function filter($group = '*') {
         $firewall = app()->make('firewall');
 
-        if (!$firewall->isWhitelisted()) {
+        if (!$firewall->isWhitelisted(null,$group)) {
             if ($to = app()->make('firewall.config')->get('redirect_non_whitelisted_to')) {
                 $action = 'redirected';
 
@@ -22,7 +22,7 @@ class Whitelist
                 $response = $firewall->blockAccess();
             }
 
-            $message = sprintf('[%s] IP not whitelisted: %s', $action, $firewall->getIp());
+            $message = sprintf('[%s] IP not whitelisted for %s: %s', $action, $group, $firewall->getIp());
 
             $firewall->log($message);
 

@@ -20,8 +20,8 @@ class FirewallWhitelist
      * @param  \Closure $next
      * @return mixed
      */
-    public function handle($request, Closure $next) {
-        $filterResponse = $this->whitelist->filter();
+    public function handle($request, Closure $next, $group = '' ) {
+        $filterResponse = $this->whitelist->filter($group);
 
         if ($filterResponse != null) {
             return $filterResponse;
